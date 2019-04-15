@@ -93,9 +93,23 @@ function findtypevars!(found, e::Expr, vars)
 end
 
 function findtypevars!(found, e, vars)
-    i = findfirst(==(e), vars)
+    i = findfirst(==(e) ∘ gettypevar, vars)
     i !== nothing && (found[i] = true)
     found
+end
+
+# extract typevar in where expressions, like :X from :(Int <: X <: Integer)
+gettypevar(varexpr::Symbol) = varexpr
+
+function gettypevar(varexpr::Expr)
+    if varexpr.head in (:>:,:<:)
+        varexpr.args[1]::Symbol
+    elseif varexpr.head == :comparison # e.g. :(X <: Y <: Z)
+        length(varexpr.args) != 5 && throw(ArgumentError("unsupported definition"))
+        varexpr.args[3]::Symbol
+    else
+        throw(ArgumentError("unsupported definition"))
+    end
 end
 
 function getargname(arg::Expr)

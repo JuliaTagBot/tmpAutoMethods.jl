@@ -36,9 +36,13 @@ end
 @auto f8(x::X, y::Y := 1) where X where Y = (X, Y)
 @auto function g8(x::X, y::Y := 1) where X where Y return (X, Y) end
 
+# correct handling of conditions in where clauses
+@auto f9(x::X:=true, y::Y:=1) where {X<:Bool, Int<:Y<:Signed} = (X,Y)
+@auto function g9(x::X:=true, y::Y:=1) where {X<:Bool, Int<:Y<:Signed} return (X,Y) end
+
 @testset "default values with :=" begin
-    for (h1, h2, h3, h4, h5, h6, h7, h8) = ((f1, f2, f3, f4, f5, f6, f7, f8),
-                                            (g1, g2, g3, g4, g5, g6, g7, g8))
+    for (h1, h2, h3, h4, h5, h6, h7, h8, h9) = ((f1, f2, f3, f4, f5, f6, f7, f8, f9),
+                                                (g1, g2, g3, g4, g5, g6, g7, g8, g9))
         @test h1(1, 2) == (1, 2)
         @test h1(2)    == (1, 2)
 
@@ -69,5 +73,10 @@ end
         @test length(methods(h8)) == 2
         @test h8(1) == (Int, Int)
         @test h8(0x1, 0x2) == (UInt8, UInt8)
+
+        @test h9(false, 2) == (Bool, Int)
+        @test h9(2)        == (Bool, Int)
+        @test h9(false)    == (Bool, Int)
+        @test h9()         == (Bool, Int)
     end
 end
