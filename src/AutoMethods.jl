@@ -11,11 +11,10 @@ function auto(e::Expr)
     e.head in [:(=), :function] && e.args[1] isa Expr ||
         throw(ArgumentError("expected function definition"))
 
-    if e.args[1].head == :where
-        wherevars = e.args[1].args[2:end]
+    wherevars = []
+    while e.args[1].head == :where
+        append!(wherevars, e.args[1].args[2:end])
         e.args[1] = e.args[1].args[1] # delete where
-    else
-        wherevars = []
     end
     e.args[1] isa Expr && e.args[1].head == :call ||
         throw(ArgumentError("expected function definition"))

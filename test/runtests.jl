@@ -32,9 +32,13 @@ end
 @auto f7(x::Bool:=false, y::Int...) = (x, y)
 @auto function g7(x::Bool:=false, y::Int...) return (x, y) end
 
+# correct handling of multiple where clauses
+@auto f8(x::X, y::Y := 1) where X where Y = (X, Y)
+@auto function g8(x::X, y::Y := 1) where X where Y return (X, Y) end
+
 @testset "default values with :=" begin
-    for (h1, h2, h3, h4, h5, h6, h7) = ((f1, f2, f3, f4, f5, f6, f7),
-                                        (g1, g2, g3, g4, g5, g6, g7))
+    for (h1, h2, h3, h4, h5, h6, h7, h8) = ((f1, f2, f3, f4, f5, f6, f7, f8),
+                                            (g1, g2, g3, g4, g5, g6, g7, g8))
         @test h1(1, 2) == (1, 2)
         @test h1(2)    == (1, 2)
 
@@ -61,5 +65,9 @@ end
             @test hh(1, 2)       == (false, (1, 2))
             @test hh()           == (false, ())
         end
+
+        @test length(methods(h8)) == 2
+        @test h8(1) == (Int, Int)
+        @test h8(0x1, 0x2) == (UInt8, UInt8)
     end
 end
