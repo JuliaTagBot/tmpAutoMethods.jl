@@ -90,9 +90,12 @@ end
 @auto          p2(x::X := 1, y::Vector{Y}) where {X=[UInt,Int],Y <: Union{Int,UInt}} =      (x, y)
 @auto function q2(x::X := 1, y::Vector{Y}) where {X=[UInt,Int],Y <: Union{Int,UInt}} return (x, y) end
 
+@auto          p3(x::X := 1, y::DataType := typeof(x)) where {X=(Int, UInt)} =      (x, y)
+@auto function q3(x::X := 1, y::DataType := typeof(x)) where {X=(Int, UInt)} return (x, y) end
+
 @testset "type lists" begin
-    for (r1, r2) = ((p1, p2),
-                    (q1, q2))
+    for (r1, r2, r3) = ((p1, p2, p3),
+                        (q1, q2, q3))
 
         @test length(methods(r1)) == 2
         @test r1(1)       == (1 => Int)
@@ -105,5 +108,11 @@ end
         @test r2(UInt[1])         ≜ (1, UInt[1])
         @test r2(UInt(1), [1])    ≜ (UInt(1), [1])
         @test r2(Int(1), UInt[1]) ≜ (1, UInt[1])
+
+        @test length(methods(r3)) == 6
+        @test r3(UInt(2), Bool) ≜ (UInt(2), Bool)
+        @test r3(Bool)          ≜ (1, Bool)
+        @test r3(2)             ≜ (2, Int)
+        @test r3()              ≜ (1, Int)
     end
 end

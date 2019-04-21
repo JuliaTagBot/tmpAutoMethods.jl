@@ -49,12 +49,19 @@ function gendefinitions(fname, fargs, defaults, argnames, linefile, wherevars)
         for b = 31:-1:1
             if n & (1 << (b-1)) != 0
                 idx, defval = defaults[b]
+                an[idx]::Symbol
+                # this type assert catches the case where we have an expression like `f(x... := 1) = ...`
+                # this case is handled fine with normal default values (as `x...` must be the last parameter)
+                # so there is no strong need to re-implement it with `:=`
                 deleteat!(sig, idx)
                 # handle cases with references to previous args,
-                # like f([x=1], y=typeof(x))
-                replacesym!(view(sig, idx:length(sig)), # not idx+1, as idx was just deleted
+                # like f(x:=1, y:=typeof(x))
+                replacesym!(@view(sig[idx:end]), # not idx+1, as idx was just deleted
                             an[idx] => defval)
-                an[idx] = defval
+                # we replace an[idx] => defval, but also all other positions on the right in `an`,
+                # because they might contain references to an[idx], like in the example above (where
+                # `an` can contain :(typeof(x)) and `x` is being replaced by 1)
+                replacesym!(@view(an[idx:end]), an[idx] => defval)
             end
         end
         newdef = :($fname($(sig...)) = $fname($(an...)))
