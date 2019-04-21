@@ -3,11 +3,11 @@ export @auto
 
 
 macro auto(e)
-    definitions = auto(e)
+    definitions = auto(__module__, e)
     esc(Expr(:block, definitions...))
 end
 
-function auto(e::Expr)
+function auto(mod::Module, e::Expr)
     e.head in [:(=), :function] && e.args[1] isa Expr ||
         throw(ArgumentError("expected function definition"))
 
@@ -32,8 +32,9 @@ function auto(e::Expr)
     end
     linefile = e.args[2].args[1]
     @assert linefile isa LineNumberNode
-    pushfirst!(gendefinitions(fname, fargs, defaults, argnames, linefile, wherevars),
-               wherewrap!(e, wherevars))
+    defs = pushfirst!(gendefinitions(fname, fargs, defaults, argnames, linefile, wherevars),
+                      e => wherevars)
+    wherewrap!.(Iterators.flatten(whereexpand.(Ref(mod), defs)))
 end
 
 function gendefinitions(fname, fargs, defaults, argnames, linefile, wherevars)
@@ -51,8 +52,8 @@ function gendefinitions(fname, fargs, defaults, argnames, linefile, wherevars)
                 deleteat!(sig, idx)
                 # handle cases with references to previous args,
                 # like f([x=1], y=typeof(x))
-                replacedefault!(view(sig, idx:length(sig)), # not idx+1, as idx was just deleted
-                                an[idx], defval)
+                replacesym!(view(sig, idx:length(sig)), # not idx+1, as idx was just deleted
+                            an[idx] => defval)
                 an[idx] = defval
             end
         end
@@ -60,22 +61,36 @@ function gendefinitions(fname, fargs, defaults, argnames, linefile, wherevars)
         newvars = wherevars[findtypevars(newdef, wherevars)]
         @assert newdef.args[2].args[1] isa LineNumberNode
         newdef.args[2].args[1] = linefile
-        push!(definitions, wherewrap!(newdef, newvars))
+        push!(definitions, newdef => newvars)
     end
     definitions
 end
 
-function replacedefault!(args, sym, defval)
+function whereexpand(mod::Module, (newdef, newvars)::Pair)
+    newdefs = []
+    loopidx = findall(v -> v isa Expr && v.head == :(=), newvars)
+    loopvars = Symbol[newvars[idx].args[1] for idx = loopidx]
+    for vals = Iterators.product((Core.eval(mod, newvars[idx].args[2]) for idx = loopidx)...)
+        def = copy(newdef)
+        for i = eachindex(vals)
+            replacesym!([def], loopvars[i] => vals[i])
+        end
+        push!(newdefs, def)
+    end
+    [(def => newvars[[i for i in eachindex(newvars) if i ∉ loopidx]]) for def in newdefs]
+end
+
+function replacesym!(args::AbstractArray, (sym, val)::Pair)
     for i in eachindex(args)
         if args[i] isa Expr
-            replacedefault!(args[i].args, sym, defval)
+            replacesym!(args[i].args, sym => val)
         elseif args[i] === sym
-            args[i] = defval
+            args[i] = val
         end
     end
 end
 
-function wherewrap!(def, wherevars)
+function wherewrap!((def, wherevars))
     if !isempty(wherevars)
         def.args[1] = Expr(:where, def.args[1], wherevars...)
     end
@@ -107,6 +122,8 @@ function gettypevar(varexpr::Expr)
     elseif varexpr.head == :comparison # e.g. :(X <: Y <: Z)
         length(varexpr.args) != 5 && throw(ArgumentError("unsupported definition"))
         varexpr.args[3]::Symbol
+    elseif varexpr.head == :(=)
+        varexpr.args[1]::Symbol # this typevar is temporary and will be replaced
     else
         throw(ArgumentError("unsupported definition"))
     end

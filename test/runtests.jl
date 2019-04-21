@@ -1,13 +1,15 @@
 using Test
 using AutoMethods: @auto, auto
 
+x ≜ y = typeof(x) == typeof(y) && x == y
+
 @testset "throw on non-functions" begin
     for e = (:(f[] = 1),
              :(f = 1),
              :(macro(x) end),
              :(f(x)),
              )
-        @test_throws ArgumentError auto(e)
+        @test_throws ArgumentError auto(@__MODULE__, e)
     end
 end
 
@@ -78,5 +80,30 @@ end
         @test h9(2)        == (Bool, Int)
         @test h9(false)    == (Bool, Int)
         @test h9()         == (Bool, Int)
+    end
+end
+
+
+@auto          p1(x::X) where {X=(UInt,Int)} =      x => X
+@auto function q1(x::X) where {X=(UInt,Int)} return x => X end
+
+@auto          p2(x::X := 1, y::Vector{Y}) where {X=[UInt,Int],Y <: Union{Int,UInt}} =      (x, y)
+@auto function q2(x::X := 1, y::Vector{Y}) where {X=[UInt,Int],Y <: Union{Int,UInt}} return (x, y) end
+
+@testset "type lists" begin
+    for (r1, r2) = ((p1, p2),
+                    (q1, q2))
+
+        @test length(methods(r1)) == 2
+        @test r1(1)       == (1 => Int)
+        @test r1(UInt(1)) == (1 => UInt)
+        @test_throws MethodError r1(0x1)
+        @test_throws MethodError r1(true)
+
+        @test length(methods(r2)) == 3
+        @test r2([1])             ≜ (1, [1])
+        @test r2(UInt[1])         ≜ (1, UInt[1])
+        @test r2(UInt(1), [1])    ≜ (UInt(1), [1])
+        @test r2(Int(1), UInt[1]) ≜ (1, UInt[1])
     end
 end
