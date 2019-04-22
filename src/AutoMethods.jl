@@ -28,7 +28,11 @@ function auto(mod::Module, e::Expr)
             push!(defaults, i => fargs[i].args[2])
             fargs[i] = fargs[i].args[1] # remove `:= default` part
         end
-        push!(argnames, getargname(fargs[i]))
+        argname, wherevar = getargname!(fargs[i])
+        push!(argnames, argname)
+        if wherevar !== nothing
+            push!(wherevars, wherevar)
+        end
     end
     linefile = e.args[2].args[1]
     @assert linefile isa LineNumberNode
@@ -154,27 +158,39 @@ function gettypevar(varexpr::Expr)
     end
 end
 
-function getargname(arg::Expr)
+# mutates only for inline type lists, e.g. f(x::(Int, UInt)) = ...
+# returns argname => typelist/nothing
+function getargname!(arg::Expr)
     if arg.head == :(::)
         if length(arg.args) == 2
-            arg.args[1]
+            arg.args[1] => replacetypelist!(arg.args, 2)
         else # length == 1
             arg1 = arg.args[1]
             arg1 isa Expr && arg1.head == :curly && arg1.args[1] == :Type ||
                 throw(ArgumentError("unsupported argument"))
-            arg1.args[2]
+            arg1.args[2] => replacetypelist!(arg.args, 1)
         end
     elseif arg.head == :kw
-        getargname(arg.args[1])
+        getargname!(arg.args[1])
     elseif arg.head == :...
-        Expr(:..., getargname(arg.args[1]))
+        a, t = getargname!(arg.args[1])
+        Expr(:..., a) => t
     else
         throw(ArgumentError("unsupported definition"))
     end
 end
 
-getargname(arg::Symbol) = arg
-getargname(arg) = throw(ArgumentError("unsupported definition"))
+getargname!(arg::Symbol) = arg => nothing
+getargname!(arg) = throw(ArgumentError("unsupported definition"))
 
+replacetypelist!(args, i) =
+    if args[i] isa Expr && args[i].head ∈ (:tuple, :vect)
+        l = args[i]
+        s = gensym()
+        args[i] = s
+        :($s = $l)
+    else
+        nothing
+    end
 
 end # module

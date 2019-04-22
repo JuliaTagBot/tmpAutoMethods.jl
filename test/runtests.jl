@@ -97,9 +97,18 @@ end
 @auto          p4(x::T) where {X<:Integer, T=(X, Type{X}, Float64)} =      x
 @auto function q4(x::T) where {X<:Integer, T=(X, Type{X}, Float64)} return x end
 
+@auto          p5(x::(X, Type{X}, Float64)) where {X<:Integer} =      x
+@auto function q5(x::(X, Type{X}, Float64)) where {X<:Integer} return x end
+
+@auto          p6(x::(Int,UInt)=1) =      x
+@auto function q6(x::(Int,UInt)=1) return x end
+
+@auto          p7(x::(Int,UInt8)...) =      x
+@auto function q7(x::(Int,UInt8)...) return x end
+
 @testset "type lists" begin
-    for (r1, r2, r3, r4) = ((p1, p2, p3, p4),
-                            (q1, q2, q3, q4))
+    for (r1, r2, r3, r4, r5, r6, r7) = ((p1, p2, p3, p4, p5, p6, p7),
+                                        (q1, q2, q3, q4, q5, q6, q7))
 
         @test length(methods(r1)) == 2
         @test r1(1)       == (1 => Int)
@@ -119,7 +128,7 @@ end
         @test r3(2)             ≜ (2, Int)
         @test r3()              ≜ (1, Int)
 
-        for rr = (r4,)
+        for rr = (r4, r5)
             @test length(methods(rr)) == 3
             @test rr(Int8(2)) === Int8(2)
             @test rr(UInt)    === UInt
@@ -128,5 +137,13 @@ end
             @test !isa((@which rr(1.2)).sig, UnionAll) # check that 'where X' has been removed
             @test_throws MethodError rr(Float64)
         end
+
+        @test length(methods(r6)) == 3
+        @test r6(2) == r6(UInt(2)) == 2
+        @test r6()  === 1
+
+        @test r7(1, 2)     === (1, 2)
+        @test r7(0x1, 0x2) === (0x1, 0x2)
+        @test_throws MethodError r7(1, 0x2) # could change
     end
 end
