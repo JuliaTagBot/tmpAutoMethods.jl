@@ -1,4 +1,5 @@
 using Test
+using InteractiveUtils: @which
 using AutoMethods: @auto, auto
 
 x ≜ y = typeof(x) == typeof(y) && x == y
@@ -93,9 +94,12 @@ end
 @auto          p3(x::X := 1, y::DataType := typeof(x)) where {X=(Int, UInt)} =      (x, y)
 @auto function q3(x::X := 1, y::DataType := typeof(x)) where {X=(Int, UInt)} return (x, y) end
 
+@auto          p4(x::T) where {X<:Integer, T=(X, Type{X}, Float64)} =      x
+@auto function q4(x::T) where {X<:Integer, T=(X, Type{X}, Float64)} return x end
+
 @testset "type lists" begin
-    for (r1, r2, r3) = ((p1, p2, p3),
-                        (q1, q2, q3))
+    for (r1, r2, r3, r4) = ((p1, p2, p3, p4),
+                            (q1, q2, q3, q4))
 
         @test length(methods(r1)) == 2
         @test r1(1)       == (1 => Int)
@@ -114,5 +118,15 @@ end
         @test r3(Bool)          ≜ (1, Bool)
         @test r3(2)             ≜ (2, Int)
         @test r3()              ≜ (1, Int)
+
+        for rr = (r4,)
+            @test length(methods(rr)) == 3
+            @test rr(Int8(2)) === Int8(2)
+            @test rr(UInt)    === UInt
+            @test rr(1.2)     === 1.2
+            @test  isa((@which rr(1)).sig,   UnionAll)
+            @test !isa((@which rr(1.2)).sig, UnionAll) # check that 'where X' has been removed
+            @test_throws MethodError rr(Float64)
+        end
     end
 end

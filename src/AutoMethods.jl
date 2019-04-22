@@ -75,16 +75,33 @@ end
 
 function whereexpand(mod::Module, (newdef, newvars)::Pair)
     newdefs = []
-    loopidx = findall(v -> v isa Expr && v.head == :(=), newvars)
-    loopvars = Symbol[newvars[idx].args[1] for idx = loopidx]
-    for vals = Iterators.product((Core.eval(mod, newvars[idx].args[2]) for idx = loopidx)...)
+    loopidx = (v -> v isa Expr && v.head == :(=)).(newvars)
+    loopvars = newvars[loopidx]
+    realvars = newvars[(~).(loopidx)]
+
+   for vals = Iterators.product((whereeval(mod, realvars, x.args[2]) for x = loopvars)...)
         def = copy(newdef)
         for i = eachindex(vals)
-            replacesym!([def], loopvars[i] => vals[i])
+            replacesym!([def], loopvars[i].args[1] => vals[i])
         end
         push!(newdefs, def)
+   end
+    # we filter with findtypevars because a typevar may have become unused after loop iteration,
+    # e.g. f(x::(X, Int)) where {X} = ...
+    (def => realvars[findtypevars(def, realvars)] for def in newdefs)
+end
+
+function whereeval(mod::Module, wherevars, e::Expr)
+    maybeeval(x) = any(findtypevars(x, wherevars)) ?
+        # can't use eval, as it depends on a where variable
+        x :
+        Core.eval(mod, x)
+    if e.head in (:tuple, :vect)
+        # dependance on where variables is supported only in these literal lists
+        Tuple(maybeeval(x) for x in e.args)
+    else
+        Core.eval(mod, e)
     end
-    [(def => newvars[[i for i in eachindex(newvars) if i ∉ loopidx]]) for def in newdefs]
 end
 
 function replacesym!(args::AbstractArray, (sym, val)::Pair)
@@ -104,6 +121,7 @@ function wherewrap!((def, wherevars))
     def
 end
 
+findtypevars(e::Symbol, vars) = findtypevars(quote $e end, vars)
 findtypevars(e::Expr, vars) = findtypevars!(falses(length(vars)), e, vars)
 
 function findtypevars!(found, e::Expr, vars)
